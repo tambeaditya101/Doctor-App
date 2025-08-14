@@ -1,0 +1,4 @@
+-- Add lock 
+ALTER TABLE public.appointments
+  ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP NULL,
+  ADD COLUMN IF NOT EXISTS is_confirmed BOOLEAN DEFAULT FALSE,
