@@ -16,13 +16,16 @@ export default function Navbar() {
   return (
     <nav className='sticky top-0 z-20 bg-slate-950/80 backdrop-blur border-b border-slate-800'>
       <div className='max-w-5xl mx-auto px-4 py-3 flex items-center justify-between'>
-        <Link to='/' className='font-semibold text-slate-100'>
+        <Link to='/discover-doc' className='font-semibold text-slate-100'>
           DocBook
         </Link>
         <div className='flex items-center gap-3'>
           {token && (
             <>
-              <Link to='/' className='text-slate-300 hover:text-white'>
+              <Link
+                to='/discover-doc'
+                className='text-slate-300 hover:text-white'
+              >
                 Discover
               </Link>
               <Link to='/appointments' className='hover:underline'>

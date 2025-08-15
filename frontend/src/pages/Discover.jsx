@@ -80,7 +80,7 @@ export default function Discover() {
         <div className='text-xl font-semibold'>Welcome, {userName} 👋</div>
       )}
       <Card>
-        <h2 className='text-lg font-semibold mb-3'>Find Doctors</h2>
+        <h2 className='text-lg font-semibold mb-3'>Discover Doctors</h2>
         <div className='grid gap-3 sm:grid-cols-3'>
           <SpecializationSelect
             value={filters.specialization}
