@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+
+/* tiny utility layer for nicer defaults */
+@layer components {
+  .badge {
+    @apply px-2 py-0.5 rounded-full text-xs bg-slate-800 text-slate-200;
+  }
+}
