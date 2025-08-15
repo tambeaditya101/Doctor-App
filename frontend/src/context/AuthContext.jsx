@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
       const res = await api.post('/auth/login', { email, password });
       sessionStorage.setItem('token', res.data.token);
       setToken(res.data.token);
+      return res;
     } finally {
       setBusy(false);
     }

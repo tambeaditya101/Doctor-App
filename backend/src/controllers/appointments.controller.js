@@ -1,78 +1,3 @@
-// import crypto from 'crypto';
-// import pool from '../config/db.js';
-// import { otpStore } from '../utils/otpStore.js';
-
-// // Step 1: Book Slot & Generate OTP
-// export const bookSlot = async (req, res) => {
-//   try {
-//     const { doctorId, availabilityId } = req.body;
-//     const { id } = req.user;
-
-//     // Lock slot (status = 'booked')
-//     const appointment = await pool.query(
-//       `INSERT INTO appointments (user_id, doctor_id, availability_id)
-//        VALUES ($1, $2, $3) RETURNING id`,
-//       [id, doctorId, availabilityId]
-//     );
-
-//     const appointmentId = appointment.rows[0].id;
-
-//     // Generate OTP
-//     const otp = crypto.randomInt(100000, 999999).toString();
-
-//     // Save OTP in memory with expiry
-//     otpStore.set(appointmentId, {
-//       otp,
-//       expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
-//     });
-
-//     console.log(`Generated OTP for appointment ${appointmentId}: ${otp}`);
-
-//     res.status(200).json({
-//       message: 'Slot locked for 5 minutes. Please confirm with OTP.',
-//       appointmentId,
-//     });
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
-// // Step 2: Confirm Booking
-// export const confirmBooking = async (req, res) => {
-//   try {
-//     const { appointmentId, otp } = req.body;
-
-//     const record = otpStore.get(appointmentId);
-//     if (!record) {
-//       return res
-//         .status(400)
-//         .json({ error: 'OTP expired or booking not found' });
-//     }
-
-//     if (Date.now() > record.expiresAt) {
-//       otpStore.delete(appointmentId);
-//       return res.status(400).json({ error: 'OTP expired' });
-//     }
-
-//     if (record.otp !== otp) {
-//       return res.status(400).json({ error: 'Invalid OTP' });
-//     }
-
-//     // Mark confirmed in DB
-//     await pool.query(
-//       `UPDATE appointments SET status = 'booked' WHERE id = $1`,
-//       [appointmentId]
-//     );
-
-//     // Remove OTP from store
-//     otpStore.delete(appointmentId);
-
-//     res.status(200).json({ message: 'Booking confirmed' });
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
 // controllers/appointments.controller.js
 import crypto from 'crypto';
 import pool from '../config/db.js';
@@ -139,11 +64,9 @@ export const bookAppointment = async (req, res) => {
     );
     if (pendingRes.rowCount > 0) {
       await client.query('ROLLBACK');
-      return res
-        .status(409)
-        .json({
-          error: 'Slot is temporarily locked. Try again in a few minutes.',
-        });
+      return res.status(409).json({
+        error: 'Slot is temporarily locked. Try again in a few minutes.',
+      });
     }
 
     // 4) create a pending appointment (status NULL is allowed by your CHECK)
@@ -275,6 +198,256 @@ export const confirmAppointment = async (req, res) => {
     otpStore.delete(appt.id);
 
     return res.json({ message: 'Appointment confirmed' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// controllers/appointments.controller.js
+// add these imports at top if not already:
+// import pool from '../config/db.js'; (exists already)
+
+export const getUserAppointments = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { status } = req.query; // optional
+
+    let query = `
+      SELECT
+        ap.id,
+        ap.public_id,
+        ap.status,
+        ap.is_confirmed,
+        ap.created_at,
+        d.id AS doctor_id,
+        d.name AS doctor_name,
+        d.mode AS doctor_mode,
+        s.name AS specialization,
+        a.id AS availability_id,
+        a.start_time,
+        a.end_time
+      FROM appointments ap
+      JOIN doctors d ON ap.doctor_id = d.id
+      JOIN specializations s ON d.specialization_id = s.id
+      JOIN availability a ON ap.availability_id = a.id
+      WHERE ap.user_id = $1
+    `;
+
+    const params = [userId];
+    if (status) {
+      params.push(status);
+      query += ` AND ap.status = $${params.length}`;
+    }
+
+    query += ` ORDER BY a.start_time ASC`;
+
+    const result = await pool.query(query, params);
+    res.json({ msg: 'success', data: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const cancelAppointment = async (req, res) => {
+  const appointmentId = Number(req.params.id);
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Lock appointment row
+    const apptRes = await client.query(
+      `SELECT id, user_id, availability_id, is_confirmed
+         FROM appointments
+        WHERE id = $1
+        FOR UPDATE`,
+      [appointmentId]
+    );
+    if (apptRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+    const appt = apptRes.rows[0];
+    if (appt.user_id !== userId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Get availability start_time (lock it)
+    const availRes = await client.query(
+      `SELECT id, start_time, is_booked FROM availability WHERE id = $1 FOR UPDATE`,
+      [appt.availability_id]
+    );
+    if (availRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Availability not found' });
+    }
+    const avail = availRes.rows[0];
+
+    // allow cancellation only if >24h before start_time
+    const diffQuery = await client.query(
+      `SELECT (a.start_time > NOW() + INTERVAL '24 hours') AS can_cancel FROM availability a WHERE a.id = $1`,
+      [avail.id]
+    );
+    if (!diffQuery.rows[0].can_cancel) {
+      await client.query('ROLLBACK');
+      return res
+        .status(400)
+        .json({
+          error: 'Cancellations allowed only >24 hours before appointment',
+        });
+    }
+
+    // update appointment status and free availability
+    await client.query(
+      `UPDATE appointments SET status = 'cancelled', is_confirmed = FALSE WHERE id = $1`,
+      [appointmentId]
+    );
+
+    await client.query(
+      `UPDATE availability SET is_booked = FALSE WHERE id = $1`,
+      [avail.id]
+    );
+
+    await client.query('COMMIT');
+
+    // cleanup in-memory OTP if present
+    // note: otpStore lives in process memory
+    // otpStore.delete(appointmentId); // if you want
+
+    return res.json({ message: 'Appointment cancelled' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+export const rescheduleAppointment = async (req, res) => {
+  const appointmentId = Number(req.params.id);
+  const { new_availability_id } = req.body;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!new_availability_id)
+    return res.status(400).json({ error: 'new_availability_id is required' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1) lock appointment
+    const apptRes = await client.query(
+      `SELECT id, user_id, doctor_id, availability_id, is_confirmed
+         FROM appointments
+        WHERE id = $1
+        FOR UPDATE`,
+      [appointmentId]
+    );
+    if (apptRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+    const appt = apptRes.rows[0];
+    if (appt.user_id !== userId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (!appt.is_confirmed) {
+      await client.query('ROLLBACK');
+      return res
+        .status(400)
+        .json({ error: 'Only confirmed appointments can be rescheduled' });
+    }
+
+    // Ensure original appointment is >24h from now
+    const originalAvail = await client.query(
+      `SELECT start_time FROM availability WHERE id = $1 FOR UPDATE`,
+      [appt.availability_id]
+    );
+    if (originalAvail.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Original availability not found' });
+    }
+    if (
+      !(
+        new Date(originalAvail.rows[0].start_time) >
+        new Date(Date.now() + 24 * 3600 * 1000)
+      )
+    ) {
+      await client.query('ROLLBACK');
+      return res
+        .status(400)
+        .json({
+          error: 'Rescheduling allowed only >24 hours before appointment',
+        });
+    }
+
+    // 2) lock new availability
+    // To avoid deadlocks, make sure to lock smaller id first (optional), but we'll just lock both
+    const newAvailRes = await client.query(
+      `SELECT id, doctor_id, start_time, end_time, is_booked FROM availability WHERE id = $1 FOR UPDATE`,
+      [new_availability_id]
+    );
+    if (newAvailRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'New availability not found' });
+    }
+    const newAvail = newAvailRes.rows[0];
+
+    // Ensure it belongs to same doctor (business rule), optional — require same doctor to reschedule
+    if (newAvail.doctor_id !== appt.doctor_id) {
+      await client.query('ROLLBACK');
+      return res
+        .status(400)
+        .json({ error: 'Reschedule must be to the same doctor' });
+    }
+
+    // Check new slot is free (not booked and not locked)
+    if (newAvail.is_booked) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Target slot is already booked' });
+    }
+
+    const pendingRes = await client.query(
+      `SELECT 1 FROM appointments WHERE availability_id = $1 AND is_confirmed = FALSE AND locked_until > NOW() LIMIT 1`,
+      [newAvail.id]
+    );
+    if (pendingRes.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res
+        .status(409)
+        .json({ error: 'Target slot is temporarily locked' });
+    }
+
+    // 3) perform swap: free old availability, mark new availability booked, update appointment
+    await client.query(
+      `UPDATE availability SET is_booked = FALSE WHERE id = $1`,
+      [appt.availability_id]
+    );
+
+    await client.query(
+      `UPDATE availability SET is_booked = TRUE WHERE id = $1`,
+      [newAvail.id]
+    );
+
+    await client.query(
+      `UPDATE appointments
+         SET availability_id = $1, created_at = NOW()
+       WHERE id = $2`,
+      [newAvail.id, appointmentId]
+    );
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Appointment rescheduled' });
   } catch (err) {
     await client.query('ROLLBACK');
     return res.status(500).json({ error: err.message });

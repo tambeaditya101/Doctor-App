@@ -17,8 +17,9 @@ export default function Login() {
     e.preventDefault();
     setErr('');
     try {
-      await login(f.email, f.password);
-      nav('/');
+      const res = await login(f.email, f.password);
+      localStorage.setItem('user', JSON.stringify(res?.data?.user));
+      nav('/discover-doc');
     } catch (e) {
       setErr(e?.response?.data?.error || 'Login failed');
     }

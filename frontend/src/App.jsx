@@ -2,6 +2,7 @@ import { useContext } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import { AuthContext } from './context/AuthContext';
+import AppointmentsPage from './pages/AppointmentsPage';
 import BookAppointment from './pages/BookAppointment';
 import Discover from './pages/Discover';
 import Login from './pages/Login';
@@ -20,7 +21,7 @@ export default function App() {
       <main className='max-w-5xl mx-auto px-4 py-6'>
         <Routes>
           <Route
-            path='/'
+            path='/discover-doc'
             element={
               <Protected>
                 <Discover />
@@ -32,6 +33,14 @@ export default function App() {
             element={
               <Protected>
                 <BookAppointment />
+              </Protected>
+            }
+          />
+          <Route
+            path='/appointments'
+            element={
+              <Protected>
+                <AppointmentsPage />
               </Protected>
             }
           />

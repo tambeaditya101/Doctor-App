@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import Button from './BUtton';
+import Button from './Button';
 
 export default function Navbar() {
   const { token, logout } = useContext(AuthContext);
@@ -24,6 +24,9 @@ export default function Navbar() {
             <>
               <Link to='/' className='text-slate-300 hover:text-white'>
                 Discover
+              </Link>
+              <Link to='/appointments' className='hover:underline'>
+                My Appointments
               </Link>
             </>
           )}

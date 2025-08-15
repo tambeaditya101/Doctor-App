@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import { Alert } from '../components/Alert';
-import Button from '../components/BUtton'; // fixed import name
+import Button from '../components/Button'; // fixed import name
 import Card from '../components/Card';
 import Select from '../components/Select';
 import SpecializationSelect from '../components/SpecializationSelect';
@@ -25,6 +25,7 @@ export default function Discover() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const userName = JSON.parse(localStorage.getItem('user'))?.name || '';
 
   // load doctors with optional filters
   const load = async (appliedFilters = filters) => {
@@ -74,6 +75,10 @@ export default function Discover() {
 
   return (
     <div className='space-y-4'>
+      {/* Greeting */}
+      {userName && (
+        <div className='text-xl font-semibold'>Welcome, {userName} 👋</div>
+      )}
       <Card>
         <h2 className='text-lg font-semibold mb-3'>Find Doctors</h2>
         <div className='grid gap-3 sm:grid-cols-3'>
