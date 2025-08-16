@@ -7,7 +7,7 @@ import {
 const router = express.Router();
 
 // Get all doctors' availability
-router.get('/', getAllAvailabilities);
+router.get('/all', getAllAvailabilities);
 
 // Get specific doctor's availability
 router.get('/:doctorId', getDoctorAvailability);

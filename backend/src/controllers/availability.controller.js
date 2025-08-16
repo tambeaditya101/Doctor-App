@@ -9,7 +9,7 @@ import {
 export const getAllAvailabilities = async (req, res) => {
   try {
     const result = await pool.query(GET_ALL_AVAILABILITY);
-    res.json(result.rows);
+    res.json({ msg: 'success', data: result.rows });
   } catch (error) {
     console.error('Error fetching all availability:', error);
     res.status(500).json({ error: 'Internal Server Error' });

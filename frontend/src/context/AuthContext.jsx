@@ -4,38 +4,63 @@ import api from '../api/axiosInstance';
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => sessionStorage.getItem('token'));
-  const [busy, setBusy] = useState(false);
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(false);
 
   const login = async (email, password) => {
-    setBusy(true);
+    setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      sessionStorage.setItem('token', res.data.token);
-      setToken(res.data.token);
+      const { token: t, user: u } = res.data || {};
+      if (!t || !u) throw new Error('Invalid login response');
+
+      localStorage.setItem('token', t);
+      localStorage.setItem('user', JSON.stringify(u));
+
+      setToken(t);
+      setUser(u);
       return res;
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   };
 
   const register = async (payload) => {
-    setBusy(true);
+    setLoading(true);
     try {
-      await api.post('/auth/register', payload);
+      return await api.post('/auth/register', payload);
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   };
 
   const logout = () => {
-    sessionStorage.removeItem('token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
+    setUser(null);
   };
 
   const value = useMemo(
-    () => ({ token, busy, login, register, logout }),
-    [token, busy]
+    () => ({
+      token,
+      user,
+      isAuthed: !!token,
+      loading,
+      login,
+      register,
+      logout,
+    }),
+    [token, user, loading]
   );
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

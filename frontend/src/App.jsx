@@ -1,18 +1,7 @@
-import { useContext } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import { AuthContext } from './context/AuthContext';
-import AppointmentsPage from './pages/AppointmentsPage';
-import BookAppointment from './pages/BookAppointment';
-import Discover from './pages/Discover';
-import Login from './pages/Login';
-import Register from './pages/Register';
-
-function Protected({ children }) {
-  const { token } = useContext(AuthContext);
-  if (!token) return <Navigate to='/login' replace />;
-  return children;
-}
+import Protected from './components/Protected';
+import { protectedRoutes, publicRoutes } from './routes';
 
 export default function App() {
   return (
@@ -20,32 +9,20 @@ export default function App() {
       <Navbar />
       <main className='max-w-5xl mx-auto px-4 py-6'>
         <Routes>
-          <Route
-            path='/discover-doc'
-            element={
-              <Protected>
-                <Discover />
-              </Protected>
-            }
-          />
-          <Route
-            path='/book'
-            element={
-              <Protected>
-                <BookAppointment />
-              </Protected>
-            }
-          />
-          <Route
-            path='/appointments'
-            element={
-              <Protected>
-                <AppointmentsPage />
-              </Protected>
-            }
-          />
-          <Route path='/login' element={<Login />} />
-          <Route path='/register' element={<Register />} />
+          {protectedRoutes.map(({ path, component: Component }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <Protected>
+                  <Component />
+                </Protected>
+              }
+            />
+          ))}
+          {publicRoutes.map(({ path, component: Component }) => (
+            <Route key={path} path={path} element={<Component />} />
+          ))}
         </Routes>
       </main>
     </div>

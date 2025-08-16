@@ -8,7 +8,7 @@ import Spinner from '../components/Spinner';
 import { AuthContext } from '../context/AuthContext';
 
 export default function Login() {
-  const { login, busy } = useContext(AuthContext);
+  const { login, loading } = useContext(AuthContext);
   const nav = useNavigate();
   const [f, setF] = useState({ email: '', password: '' });
   const [err, setErr] = useState('');
@@ -17,8 +17,7 @@ export default function Login() {
     e.preventDefault();
     setErr('');
     try {
-      const res = await login(f.email, f.password);
-      localStorage.setItem('user', JSON.stringify(res?.data?.user));
+      await login(f.email, f.password); // AuthContext handles storage now
       nav('/discover-doc');
     } catch (e) {
       setErr(e?.response?.data?.error || 'Login failed');
@@ -44,8 +43,8 @@ export default function Login() {
             onChange={(e) => setF({ ...f, password: e.target.value })}
           />
           {err && <Alert kind='error'>{err}</Alert>}
-          <Button className='w-full' disabled={busy}>
-            {busy ? <Spinner label='Signing in…' /> : 'Sign in'}
+          <Button className='w-full' disabled={loading}>
+            {loading ? <Spinner label='Signing in…' /> : 'Sign in'}
           </Button>
         </form>
         <div className='text-sm text-slate-400 mt-3'>
