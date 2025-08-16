@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import { Alert } from '../components/Alert';
@@ -12,57 +12,83 @@ export default function BookAppointment() {
   const nav = useNavigate();
   const { state } = useLocation() || {};
 
-  const [phase, setPhase] = useState('locking'); // locking | locked | confirming | done | expired
+  // locking | locked | confirming | done | expired | error
+  const [phase, setPhase] = useState('locking');
   const [err, setErr] = useState('');
   const [appointmentId, setAppointmentId] = useState(null);
   const [serverOtp, setServerOtp] = useState('');
   const [otp, setOtp] = useState('');
+  const [timeLeft, setTimeLeft] = useState(0);
 
-  const [timeLeft, setTimeLeft] = useState(300); // 5 min in seconds
+  const didLock = useRef(false); // prevent double-fire on mount
   const timerRef = useRef(null);
+  const otpInputRef = useRef(null);
 
-  useEffect(() => {
-    if (!state?.availabilityId) {
-      nav('/');
-      return;
-    }
-    lockSlot();
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resetBookingState = useCallback(() => {
+    setAppointmentId(null);
+    setServerOtp('');
+    setOtp('');
   }, []);
 
-  const startTimer = () => {
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          setPhase('expired');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
-  const lockSlot = async () => {
+  const startTimer = useCallback(
+    (duration) => {
+      clearTimer();
+      setTimeLeft(duration);
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearTimer();
+            resetBookingState();
+            setPhase('expired');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    },
+    [clearTimer, resetBookingState]
+  );
+
+  const lockSlot = useCallback(async () => {
     setErr('');
     setPhase('locking');
-    setTimeLeft(300);
+    resetBookingState();
+
     try {
       const res = await api.post('/appointments/book', {
-        availability_id: state.availabilityId,
+        availability_id: state?.availabilityId,
       });
+
       setAppointmentId(res.data.appointment_id);
-      setServerOtp(res.data.otp || ''); // Dummy OTP
+      setServerOtp(res.data.otp || ''); // PoC only
       setPhase('locked');
-      startTimer();
+
+      // derive exact expiry from backend instead of fixed 300s
+      const expiry = new Date(res.data.locked_until).getTime();
+      const now = Date.now();
+      const diff = Math.max(0, Math.floor((expiry - now) / 1000));
+
+      startTimer(diff);
+
+      // tiny delay to ensure input is mounted
+      setTimeout(() => otpInputRef.current?.focus(), 0);
     } catch (e) {
-      setErr(e?.response?.data?.error || 'Could not lock slot');
-      setPhase('locking');
+      const msg =
+        e?.response?.data?.error ||
+        (e?.message?.includes('Network')
+          ? 'Network error'
+          : 'Could not lock slot');
+      setErr(msg);
+      setPhase('error');
     }
-  };
+  }, [state?.availabilityId, resetBookingState, startTimer]);
 
   const confirm = async () => {
     setErr('');
@@ -72,11 +98,24 @@ export default function BookAppointment() {
         appointment_id: appointmentId,
         otp,
       });
+      clearTimer();
       setPhase('done');
       setTimeout(() => nav('/appointments'), 1200);
     } catch (e) {
-      setErr(e?.response?.data?.error || 'Confirmation failed');
-      setPhase('locked');
+      const msg =
+        e?.response?.data?.error ||
+        (e?.message?.includes('Network')
+          ? 'Network error'
+          : 'Confirmation failed');
+      setErr(msg);
+
+      if (msg.toLowerCase().includes('expired')) {
+        resetBookingState();
+        setPhase('expired');
+      } else {
+        // allow retry if still valid
+        setPhase('locked');
+      }
     }
   };
 
@@ -85,6 +124,21 @@ export default function BookAppointment() {
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Mount effects
+  useEffect(() => {
+    if (!state?.availabilityId) {
+      nav('/discover-doc');
+      return;
+    }
+    if (!didLock.current) {
+      didLock.current = true;
+      lockSlot();
+    }
+    return () => {
+      clearTimer();
+    };
+  }, [nav, state?.availabilityId, lockSlot, clearTimer]);
 
   return (
     <div className='max-w-lg mx-auto space-y-4'>
@@ -109,6 +163,21 @@ export default function BookAppointment() {
         </Card>
       )}
 
+      {phase === 'error' && (
+        <Card className='space-y-3'>
+          <Alert kind='error'>{err}</Alert>
+          <div className='flex gap-2'>
+            <Button onClick={lockSlot}>Try Again</Button>
+            <Button
+              className='bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900'
+              onClick={() => nav('/discover-doc')}
+            >
+              Back
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {phase === 'locked' && (
         <Card className='space-y-3'>
           {err && <Alert kind='error'>{err}</Alert>}
@@ -129,27 +198,31 @@ export default function BookAppointment() {
             )}
           </div>
 
-          {/* OTP input */}
           <Input
+            ref={otpInputRef}
             label='Enter OTP'
             placeholder='6-digit code'
             value={otp}
             onChange={(e) => setOtp(e.target.value)}
+            maxLength={6}
           />
 
           <div className='flex gap-2'>
-            <Button onClick={confirm}>Confirm</Button>
             <Button
-              className='bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900'
-              onClick={lockSlot}
+              onClick={confirm}
+              disabled={!appointmentId || otp.length < 4}
             >
-              Relock
+              Confirm
             </Button>
           </div>
         </Card>
       )}
 
-      {phase === 'confirming' && <Spinner label='Confirming…' />}
+      {phase === 'confirming' && (
+        <Card>
+          <Spinner label='Confirming…' />
+        </Card>
+      )}
 
       {phase === 'done' && (
         <Card>
@@ -158,9 +231,17 @@ export default function BookAppointment() {
       )}
 
       {phase === 'expired' && (
-        <Card>
+        <Card className='space-y-3'>
           <Alert kind='error'>Slot expired! Please book again.</Alert>
-          <Button onClick={lockSlot}>Book Again</Button>
+          <div className='flex gap-2'>
+            <Button onClick={lockSlot}>Book Again</Button>
+            <Button
+              className='bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900'
+              onClick={() => nav('/discover-doc')}
+            >
+              Back
+            </Button>
+          </div>
         </Card>
       )}
     </div>

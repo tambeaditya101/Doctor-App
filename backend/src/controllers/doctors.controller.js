@@ -28,6 +28,7 @@ export const discoverDoctors = async (req, res) => {
       JOIN specializations s ON d.specialization_id = s.id
       JOIN availability a ON d.id = a.doctor_id
       WHERE a.is_booked = FALSE
+      AND a.start_time > NOW()
         AND NOT EXISTS (
           SELECT 1 FROM appointments ap
           WHERE ap.availability_id = a.id

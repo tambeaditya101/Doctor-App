@@ -62,7 +62,7 @@ export default function Discover() {
   }, []); // run once
 
   const onBook = (r) => {
-    nav('/book', {
+    nav(`/book`, {
       state: {
         doctorId: r.id,
         availabilityId: r.availability_id,

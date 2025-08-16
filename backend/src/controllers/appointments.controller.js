@@ -65,7 +65,7 @@ export const bookAppointment = async (req, res) => {
     if (pendingRes.rowCount > 0) {
       await client.query('ROLLBACK');
       return res.status(409).json({
-        error: 'Slot is temporarily locked. Try again in a few minutes.',
+        error: 'Slot is temporarily locked. Try again after 5 minutes.',
       });
     }
 
@@ -206,15 +206,27 @@ export const confirmAppointment = async (req, res) => {
   }
 };
 
-// controllers/appointments.controller.js
-// add these imports at top if not already:
-// import pool from '../config/db.js'; (exists already)
-
 export const getUserAppointments = async (req, res) => {
+  const client = await pool.connect();
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    await client.query('BEGIN');
+
+    // ✅ 1. Auto-mark past "booked" appointments as completed
+    await client.query(
+      `UPDATE appointments ap
+       SET status = 'completed'
+       FROM availability a
+       WHERE ap.availability_id = a.id
+         AND ap.user_id = $1
+         AND ap.status = 'booked'
+         AND a.end_time < NOW()`,
+      [userId]
+    );
+
+    // ✅ 2. Now fetch updated list
     const { status } = req.query; // optional
 
     let query = `
@@ -246,10 +258,16 @@ export const getUserAppointments = async (req, res) => {
 
     query += ` ORDER BY a.start_time ASC`;
 
-    const result = await pool.query(query, params);
+    const result = await client.query(query, params);
+
+    await client.query('COMMIT');
+
     res.json({ msg: 'success', data: result.rows });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 };
 
@@ -293,16 +311,17 @@ export const cancelAppointment = async (req, res) => {
 
     // allow cancellation only if >24h before start_time
     const diffQuery = await client.query(
-      `SELECT (a.start_time > NOW() + INTERVAL '24 hours') AS can_cancel FROM availability a WHERE a.id = $1`,
+      //for testing.. SELECT (a.start_time > NOW() + INTERVAL '1 minute') AS can_cancel
+
+      `SELECT (a.start_time > NOW() + INTERVAL '24 hours') AS can_cancel
+         FROM availability a WHERE a.id = $1`,
       [avail.id]
     );
     if (!diffQuery.rows[0].can_cancel) {
       await client.query('ROLLBACK');
-      return res
-        .status(400)
-        .json({
-          error: 'Cancellations allowed only >24 hours before appointment',
-        });
+      return res.status(400).json({
+        error: 'Cancellations allowed only >24 hours before appointment',
+      });
     }
 
     // update appointment status and free availability
@@ -384,11 +403,9 @@ export const rescheduleAppointment = async (req, res) => {
       )
     ) {
       await client.query('ROLLBACK');
-      return res
-        .status(400)
-        .json({
-          error: 'Rescheduling allowed only >24 hours before appointment',
-        });
+      return res.status(400).json({
+        error: 'Rescheduling allowed only >24 hours before appointment',
+      });
     }
 
     // 2) lock new availability
