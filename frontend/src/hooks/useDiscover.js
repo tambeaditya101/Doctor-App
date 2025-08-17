@@ -23,7 +23,14 @@ export function useDiscover() {
         Object.entries(appliedFilters).filter(([_, v]) => v)
       );
       const res = await api.get(`/doctors/discover?${q.toString()}`);
-      setRows(Array.isArray(res.data) ? res.data : res.data?.data || []);
+
+      // ✅ expect consistent backend response
+      if (res.data.success) {
+        setRows(res.data.data?.doctors || []);
+      } else {
+        setErr(res.data.message || 'Failed to load doctors');
+        setRows([]);
+      }
     } catch (e) {
       console.error('discover error', e);
       setErr('Failed to load doctors');
