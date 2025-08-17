@@ -19,7 +19,8 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      const { token: t, user: u } = res.data || {};
+
+      const { token: t, user: u } = res.data?.data || {};
       if (!t || !u) throw new Error('Invalid login response');
 
       localStorage.setItem('token', t);
