@@ -9,7 +9,7 @@ export default function SpecializationSelect({ value, onChange }) {
     const fetchData = async () => {
       try {
         const res = await api.get('/specializations'); // your backend endpoint
-        setSpecializations(res.data.data || []);
+        setSpecializations(res.data?.data?.specializations || []);
       } catch (error) {
         console.error('Error fetching specializations', error);
       }

@@ -4,15 +4,18 @@ import {
   GET_ALL_AVAILABILITY,
   GET_DOCTOR_AVAILABILITY,
 } from '../queries/availability.query.js';
+import { errorResponse, successResponse } from '../utils/response.js';
 
 // Get all availability
 export const getAllAvailabilities = async (req, res) => {
   try {
     const result = await pool.query(GET_ALL_AVAILABILITY);
-    res.json({ msg: 'success', data: result.rows });
+    return successResponse(res, 'Availabilities fetched successfully', {
+      availabilities: result.rows,
+    });
   } catch (error) {
     console.error('Error fetching all availability:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    return errorResponse(res, 'Failed to fetch availabilities', 500);
   }
 };
 
@@ -23,14 +26,14 @@ export const getDoctorAvailability = async (req, res) => {
     const result = await pool.query(GET_DOCTOR_AVAILABILITY, [doctorId]);
 
     if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: 'No availability found for this doctor' });
+      return errorResponse(res, 'No availability found for this doctor', 404);
     }
 
-    res.json(result.rows);
+    return successResponse(res, 'Doctor availability fetched successfully', {
+      availability: result.rows,
+    });
   } catch (error) {
     console.error('Error fetching availability:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    return errorResponse(res, 'Failed to fetch doctor availability', 500);
   }
 };

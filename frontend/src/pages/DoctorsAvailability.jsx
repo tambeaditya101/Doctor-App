@@ -40,7 +40,9 @@ export default function AvailabilityList() {
       setErr('');
       try {
         const res = await api.get('/availability/all');
-        const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+        const data = Array.isArray(res.data)
+          ? res.data
+          : res.data?.data?.availabilities || [];
         if (active) setRows(data);
       } catch (e) {
         if (active) {
