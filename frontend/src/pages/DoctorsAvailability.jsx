@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import { Alert } from '../components/Alert';
-import Button from '../components/Button';
 import Card from '../components/Card';
 import Spinner from '../components/Spinner';
 import { fmtDateTime, fmtTime } from '../utils/format';
@@ -72,23 +71,6 @@ export default function AvailabilityList() {
       )
       .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   }, [rows, statusFilter, q]);
-
-  // Memoized book handler
-  const onBook = useCallback(
-    (slot) => {
-      if (slot._status !== 'available') return;
-      nav('/book', {
-        state: {
-          doctorId: slot.doctor_id,
-          availabilityId: slot.id,
-          doctorName: slot.doctor_name,
-          timeFrom: slot.start_time,
-          timeTo: slot.end_time,
-        },
-      });
-    },
-    [nav]
-  );
 
   return (
     <div className='space-y-4'>
@@ -190,14 +172,6 @@ export default function AvailabilityList() {
                           >
                             {status.charAt(0).toUpperCase() + status.slice(1)}
                           </span>
-                        </td>
-                        <td className='px-4 py-3 text-right'>
-                          <Button
-                            disabled={status !== 'available'}
-                            onClick={() => onBook(slot)}
-                          >
-                            {status === 'available' ? 'Book' : 'Unavailable'}
-                          </Button>
                         </td>
                       </tr>
                     );
