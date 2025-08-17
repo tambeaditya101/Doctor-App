@@ -57,7 +57,7 @@ export function useBooking(availabilityId, onSuccessNav) {
       const res = await api.post('/appointments/book', {
         availability_id: availabilityId,
       });
-
+      console.log(res, '::ADI');
       setAppointmentId(res.data.appointment_id);
       setServerOtp(res.data.otp || '');
       setPhase('locked');
