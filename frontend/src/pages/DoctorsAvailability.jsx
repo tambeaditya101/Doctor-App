@@ -9,7 +9,7 @@ import { fmtDateTime, fmtTime } from '../utils/format';
 // Utility for computing slot status
 const computeStatus = (slot) => {
   const now = Date.now();
-  const end = new Date(slot.end_time).getTime();
+  const end = new Date(slot.start_time).getTime();
   if (end < now) return 'expired';
   if (slot.is_booked) return 'booked';
   return 'available';
