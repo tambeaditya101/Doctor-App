@@ -14,6 +14,7 @@ export const protectedRoutes = [
 ];
 
 export const publicRoutes = [
+  { path: '/', component: Login },
   { path: '/login', component: Login },
   { path: '/register', component: Register },
 ];

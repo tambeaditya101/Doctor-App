@@ -29,7 +29,7 @@ Built with **React + Node.js + Express + PostgreSQL** and secured with **JWT aut
 
 **Backend**
 
-- Node.js + Express
+- Node.js (v20+) + Express
 - PostgreSQL (with migrations & SQL schema)
 - JWT Authentication
 - REST API structure
