@@ -19,7 +19,7 @@ export const GET_ALL_AVAILABILITY = `
         d.mode AS doctor_mode,
         s.name AS specialization,
         CASE
-          WHEN a.end_time < NOW() THEN 'expired'
+          WHEN a.start_time < NOW() THEN 'expired'
           WHEN a.is_booked = TRUE THEN 'booked'
           ELSE 'available'
         END AS status
