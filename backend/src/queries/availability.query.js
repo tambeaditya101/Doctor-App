@@ -26,5 +26,11 @@ export const GET_ALL_AVAILABILITY = `
       FROM availability a
       JOIN doctors d ON a.doctor_id = d.id
       JOIN specializations s ON d.specialization_id = s.id
-      ORDER BY a.start_time ASC
+       ORDER BY
+        CASE
+          WHEN a.start_time >= NOW() AND a.is_booked = FALSE THEN 0  -- available (future)
+          WHEN a.start_time >= NOW() AND a.is_booked = TRUE THEN 1   -- booked (future)
+          ELSE 2                                                    -- expired (past)
+        END,
+    a.start_time DESC
 `;

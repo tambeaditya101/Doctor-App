@@ -37,7 +37,7 @@ export default function Navbar() {
   // Links config
   const authedLinks = [
     { to: '/discover-doc', label: 'Discover' },
-    { to: '/doc-availability', label: 'Availability' },
+    { to: '/doc-availability', label: 'Availability Log' },
     { to: '/appointments', label: 'Appointments' },
   ];
 
